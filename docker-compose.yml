@@ -163,6 +163,7 @@ services:
       AWS_REGION: ${AWS_REGION:-eu-central-1}
       JDBC_URL: jdbc:postgresql://postgres-primary:5432/traffic
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      DEPLOY_ENV: ${DEPLOY_ENV}
     volumes:
       - ./spark/jobs:/opt/spark/jobs
       - ./schemas:/opt/spark/schemas:ro

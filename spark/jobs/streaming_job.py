@@ -286,7 +286,7 @@ def write_bronze(df: DataFrame, name: str):
         .option("path", bronze_path)
         .option("checkpointLocation", f"{CHECKPOINT_BASE}/bronze_{name}")
         .partitionBy("year", "month", "day")
-        .trigger(processingTime="15 minutes")
+        .trigger(processingTime="1 minute")
         .start()
     )
 
@@ -436,7 +436,7 @@ def write_silver_flow(df: DataFrame):
         .option("path", silver_path)
         .option("checkpointLocation", f"{CHECKPOINT_BASE}/silver_flow")
         .partitionBy("city")
-        .trigger(processingTime="15 minutes")
+        .trigger(processingTime="1 minute")
         .start()
     )
 
@@ -533,7 +533,7 @@ def write_silver_incidents(df: DataFrame):
         .option("path", silver_path)
         .option("checkpointLocation", f"{CHECKPOINT_BASE}/silver_incidents")
         .partitionBy("city")
-        .trigger(processingTime="15 minutes")
+        .trigger(processingTime="1 minute")
         .start()
     )
 
@@ -653,7 +653,7 @@ def write_flow_gold(df: DataFrame, spark: SparkSession):
         df.writeStream
         .foreachBatch(lambda batch_df, batch_id: upsert_flow_gold(batch_df, batch_id, spark))
         .option("checkpointLocation", f"{CHECKPOINT_BASE}/gold_flow")
-        .trigger(processingTime="15 minutes")
+        .trigger(processingTime="1 minute")
         .start()
     )
 
@@ -776,7 +776,7 @@ def write_incident_gold(df: DataFrame, spark: SparkSession):
         df.writeStream
         .foreachBatch(lambda batch_df, batch_id: upsert_incident_gold(batch_df, batch_id, spark))
         .option("checkpointLocation", f"{CHECKPOINT_BASE}/gold_incidents")
-        .trigger(processingTime="15 minutes")
+        .trigger(processingTime="1 minute")
         .start()
     )
 

@@ -524,6 +524,51 @@ def transform_incident_silver(raw_df: DataFrame) -> DataFrame:
     )
 
 
+def incident_silver_df(enriched_df: DataFrame) -> DataFrame:
+    """
+    FIX (Priority 1 — incidents lag root cause):
+    Tumbling 15-min window aggregation, deduplicating repeated polls of the
+    same active incident. Without this, every raw Kafka poll (every ~10-30s)
+    becomes its own row, writing hundreds of near-duplicate rows per minute
+    to fact_incidents and starving the flow pipeline of processing time.
+
+    Grain after this step: one row per incident identity per 15-min window
+    (matches the documented fact_incidents grain in 06_medallion_architecture.md).
+    """
+    return (
+        enriched_df
+        .withWatermark("event_time", "2 minutes")
+        .groupBy(
+            F.window("event_time", "15 minutes"),
+            F.col("bbox_name"),
+            F.col("category"),
+            F.col("from_location"),
+            F.col("to_location"),
+            F.col("start_time_parsed"),
+        )
+        .agg(
+            F.first("city",                      ignorenulls=True).alias("city"),
+            F.first("icon_category_id",          ignorenulls=True).alias("icon_category_id"),
+            F.first("magnitude",                 ignorenulls=True).alias("magnitude"),
+            F.first("magnitude_label",           ignorenulls=True).alias("magnitude_label"),
+            F.first("delay_seconds",             ignorenulls=True).alias("delay_seconds"),
+            F.first("delay_minutes",             ignorenulls=True).alias("delay_minutes"),
+            F.first("length_meters",             ignorenulls=True).alias("length_meters"),
+            F.first("length_km",                 ignorenulls=True).alias("length_km"),
+            F.first("road_numbers",              ignorenulls=True).alias("road_numbers"),
+            F.first("end_time_parsed",           ignorenulls=True).alias("end_time_parsed"),
+            F.first("incident_duration_minutes", ignorenulls=True).alias("incident_duration_minutes"),
+            F.first("is_road_closure",           ignorenulls=True).alias("is_road_closure"),
+            F.first("has_known_location",        ignorenulls=True).alias("has_known_location"),
+            F.first("is_active",                 ignorenulls=True).alias("is_active"),
+            F.first("lat",                       ignorenulls=True).alias("lat"),
+            F.first("lon",                       ignorenulls=True).alias("lon"),
+        )
+        .withColumn("event_time", F.col("window.start"))
+        .drop("window")
+    )
+
+
 def write_silver_incidents(df: DataFrame):
     silver_path = f"s3a://{S3_BUCKET}/silver/incidents"
     return (
@@ -819,7 +864,12 @@ def main():
     q_bronze_inc  = write_bronze(inc_raw_df, "incidents")
 
     # 3. Silver — per-incident rows with all derived fields
-    inc_silver    = transform_incident_silver(inc_raw_df)
+    inc_enriched  = transform_incident_silver(inc_raw_df)
+
+    # FIX (Priority 1): collapse repeated polls of the same active incident
+    # into one row per incident per 15-min window before writing downstream.
+    inc_silver    = incident_silver_df(inc_enriched)
+
     q_silver_inc  = write_silver_incidents(inc_silver)
 
     # 4. Gold — star schema upsert into PostgreSQL
